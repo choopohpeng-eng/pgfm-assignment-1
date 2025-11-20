@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NEA 2-Hour Weather — Auto Fetch & Display</title>
+
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    padding: 20px;
+  }
+
+  h1, h2 {
+    margin-bottom: 10px;
+  }
+
+  table {
+    border: 1px;
+    width: 100%;
+    max-width: 900px;
+    margin-top: 10px;
+  }
+
+  th, td {
+    border: 1px solid #444;
+    padding: 8px;
+    text-align: left;
+  }
+
+  #errorBox {
+    margin-top: 15px;
+    color: red;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+
+<h1>NEA 2-Hour Weather Forecast — Auto Fetch & Display</h1>
+
+<div id="errorBox"></div>
+
+<!-- TIME TABLE -->
+<h2>Forecast Time Information</h2>
+<table id="timeTable">
+  <tr>
+    <th>Start Time</th>
+    <th>End Time</th>
+    <th>Duration</th>
+  </tr>
+</table>
+
+<!-- FULL 47 REGION TABLE -->
+<h2>All Regions Table (47 Regions)</h2>
+<table id="regionsTable">
+  <tr>
+    <th>Region Name</th>
+    <th>Latitude</th>
+    <th>Longitude</th>
+    <th>Forecast</th>
+  </tr>
+</table>
+
+<script>
+  let storedData = [];
+  let timeInfo = {};
+
+  window.onload = () => {
+    fetchNEA();
+  };
+
+  async function fetchNEA() {
+    const apiUrl = "https://api-open.data.gov.sg/v2/real-time/api/two-hr-forecast";
+
+    try {
+      const response = await fetch(apiUrl, {
+        headers: {
+          "X-API-Key": "PUT_YOUR_API_KEY_HERE"
+        }
+      });
+
+      if (!response.ok) {
+        document.getElementById("errorBox").innerHTML =
+          "Error: HTTP " + response.status + ". Check API Key.";
+        throw new Error("HTTP error " + response.status);
+      }
+
+      const x = await response.json();
+      console.log("Raw API JSON:", x);
+
+      if (!x.data || !x.data.items || x.data.items.length === 0) {
+        document.getElementById("errorBox").innerHTML = "Error: No data returned.";
+        return;
+      }
+
+      // ---------------------------------------------------
+      // TIME INFO
+      // ---------------------------------------------------
+      timeInfo = {
+        start: x.data.items[0].valid_period.start,
+        end: x.data.items[0].valid_period.end,
+        duration: x.data.items[0].valid_period.text
+      };
+
+      updateTimeTable(timeInfo);
+
+      // ---------------------------------------------------
+      // REGIONS DATA
+      // ---------------------------------------------------
+      const areaMetadata = x.data.area_metadata;
+      const forecasts = x.data.items[0].forecasts;
+
+      storedData = [];
+
+      for (let i = 0; i < areaMetadata.length; i++) {
+        storedData.push({
+          name: areaMetadata[i].name,
+          lat: areaMetadata[i].label_location.latitude,
+          lon: areaMetadata[i].label_location.longitude,
+          forecast: forecasts[i].forecast
+        });
+      }
+
+      updateRegionsTable();
+
+    } catch (err) {
+      console.error("Fetch error:", err);
+      document.getElementById("errorBox").innerHTML =
+        "Fetch Error — check console for details.";
+    }
+  }
+
+  // -------------------------------------
+  // Update Time Table
+  // -------------------------------------
+  function updateTimeTable(time) {
+    const table = document.getElementById("timeTable");
+
+    table.innerHTML = `
+      <tr>
+        <th>Start Time</th>
+        <th>End Time</th>
+        <th>Duration</th>
+      </tr>
+      <tr>
+        <td>${time.start}</td>
+        <td>${time.end}</td>
+        <td>${time.duration}</td>
+      </tr>
+    `;
+  }
+
+  // -------------------------------------
+  // Build full table of all regions
+  // -------------------------------------
+  function updateRegionsTable() {
+    const table = document.getElementById("regionsTable");
+
+    table.innerHTML = `
+      <tr>
+        <th>Region Name</th>
+        <th>Latitude</th>
+        <th>Longitude</th>
+        <th>Forecast</th>
+      </tr>
+    `;
+
+    storedData.forEach(region => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${region.name}</td>
+        <td>${region.lat}</td>
+        <td>${region.lon}</td>
+        <td>${region.forecast}</td>
+      `;
+      table.appendChild(row);
+    });
+  }
+</script>
+
+</body>
+</html>
+
