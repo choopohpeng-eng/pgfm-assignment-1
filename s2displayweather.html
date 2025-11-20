@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NEA 2-Hour Weather Forecast</title>
+
+  <style>
+    html,body{
+      height:100%;
+      margin:0;
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+      background: white
+    }
+    
+    /* TITLE PANEL - fixed near top */
+    header.app-title{
+      position:fixed;
+      left:10px;
+      right:10px;
+      top:10px;
+      height:40px;
+      background:deepskyblue;
+      border-radius:8px;
+      display:flex;
+      align-items:center;
+      padding:16px;
+      z-index:40;
+      border:1px black;
+    }
+    header.app-title h1{font-size:1.05rem;margin:0;padding:0}
+
+    /* WEATHER DISPLAY PANEL - fixed below title */
+    section.weather-panel{
+      position:fixed;
+      left:10px;
+      right:10px;
+      top:80px;
+      height:120px;
+      background:white; 
+      border-radius:8px;
+      border:1px black;
+      padding:12px;
+      display:flex;
+      gap:12px;
+      align-items:center;
+      z-index:35;
+      box-shadow:0 6px 16px rgba(0,0,0,0.04);
+    }
+    .weather-left{flex:1}
+    .weather-right{width:140px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+    .weather-emoji{font-size:44px}
+    .weather-region{font-weight:700;font-size:1.15rem}
+    .weather-forecast{margin-top:4px;font-size:1rem}
+    .forecast-duration{margin-top:6px;color:grey; font-size:0.9rem}
+
+    /* INSTRUCTION PANEL - fixed below weather panel */
+    .instruction{
+      position:fixed;
+      left:10px;
+      right:10px;
+      top:150px;
+      height:40px;
+      display:flex;
+      align-items:center;
+      padding:14px;
+      z-index:30;
+      font-weight:600;
+    }
+
+    /* REGION PANEL - fixed below intruction panel and scrollable */
+    .regions-wrap{
+      position:fixed;
+      left:10px;
+      right:10px;
+      top:240px;
+      bottom:10px;
+      overflow:auto;
+      padding:10px;
+      border-radius:8px;
+      border:1px black;
+      background:white;
+    }
+
+    /* Flexible grid of region cards */
+    .regions-grid{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      align-items:flex-start;
+    }
+
+    .region-card{
+      flex:1 1 calc(25% - 10px); /* 4 across on large screens */
+      min-width:150px;
+      max-width:320px;
+      background:aqua;
+      border:1px black;
+      border-radius:8px;
+      padding:12px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      cursor:pointer;
+    }
+    .region-card.selected{background:green;color:white;border-color:black}
+  </style>
+</head>
+<body>
+
+  <header class="app-title">
+    <h1>NEA 2-Hour Weather Forecast</h1>
+  </header>
+
+  <section class="weather-panel" aria-live="polite">
+    <div class="weather-left">
+      <div class="weather-region" id="weatherRegion">—</div>
+      <div class="weather-forecast" id="weatherForecast">Select a region to view forecast</div>
+      <div class="forecast-duration muted" id="weatherDuration">&nbsp;</div>
+    </div>
+    <div class="weather-right">
+      <div class="weather-emoji" id="weatherEmoji">⛅</div>
+      <div class="muted" id="lastUpdated">Last updated: —</div>
+    </div>
+  </section>
+
+  <div class="instruction">Select A Region to View the Weather Forecast</div>
+
+  <div class="regions-wrap">
+    <div id="errorBox" class="error" style="display:none;margin-bottom:8px"></div>
+    <div class="regions-grid" id="regionsGrid">
+      <!-- region cards injected here -->
+    </div>
+  </div>
+
+<script>
+  // ========== Emoji mapping (extracts / matches common NEA labels) ==========
+  const emojiMap = {
+    'Fair and Warm': '🌤️',
+    'Fair (Day)': '🌤️',
+    'Fair (Night)': '🌙',
+    'Fair': '🌤️',
+    'Partly Cloudy (Day)': '⛅',
+    'Partly Cloudy (Night)': '🌥️',
+    'Partly Cloudy': '⛅',
+    'Cloudy': '☁️',
+    'Hazy': '🌫️',
+    'Slightly Hazy': '🌫️',
+    'Windy': '💨',
+    'Mist': '🌫️',
+    'Fog': '🌫️',
+    'Light Rain': '🌦️',
+    'Moderate Rain': '🌧️',
+    'Heavy Rain': '⛈️',
+    'Passing Showers': '🌦️',
+    'Light Showers': '🌦️',
+    'Showers': '🌧️',
+    'Heavy Showers': '⛈️',
+    'Thundery Showers': '⛈️',
+    'Heavy Thundery Showers': '🌩️',
+    'Heavy Thundery Showers with Gusty Winds': '🌩️💨'
+  };
+
+  function mapForecastToEmoji(forecast) {
+    if (!forecast) return '❓';
+    // exact match first
+    if (emojiMap[forecast]) return emojiMap[forecast];
+    // try contains
+    const keys = Object.keys(emojiMap);
+    for (const k of keys) {
+      if (forecast.toLowerCase().includes(k.toLowerCase())) return emojiMap[k];
+    }
+    
+  }
+
+  // ========== State ==========
+  let areaMeta = [];
+  let forecasts = [];
+  let selectedIndex = null;
+
+  // if you have an API key, put it here. If left empty, fetch will try unauthenticated call (works for many open endpoints)
+  const API_KEY = '';
+  const API_URL = 'https://api-open.data.gov.sg/v2/real-time/api/two-hr-forecast';
+
+  window.addEventListener('load', () => {
+    fetchNEA();
+  });
+
+  async function fetchNEA(){
+    const headers = {};
+    if (API_KEY) headers['X-API-Key'] = API_KEY;
+
+    try{
+      const res = await fetch(API_URL, {headers});
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      // Sanity checks
+      if (!data.data || !data.data.area_metadata || !data.data.items || data.data.items.length===0){
+        showError('API returned unexpected structure. See console.');
+        console.error('API JSON', data);
+        return;
+      }
+
+      areaMeta = data.data.area_metadata; // array of {name,label_location}
+      forecasts = data.data.items[0].forecasts; // array of {area,forecast}
+      const validPeriod = data.data.items[0].valid_period;
+      const durationText = data.data.items[0].valid_period.text || (validPeriod.start + ' → ' + validPeriod.end);
+      const lastUpdatedISO = data.data.items[0].timestamp || new Date().toISOString();
+
+      document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date(lastUpdatedISO).toLocaleString();
+
+      buildRegionCards();
+
+      // auto-select a sensible default (e.g., central area) — pick index 0 if exists
+      if (areaMeta.length>0) selectRegion(0);
+
+      // store period
+      document.getElementById('weatherDuration').textContent = durationText;
+    }catch(err){
+      showError('Fetch Error — check console for details');
+      console.error(err);
+    }
+  }
+
+  function showError(msg){
+    const box = document.getElementById('errorBox');
+    box.style.display = 'block';
+    box.textContent = msg;
+  }
+
+  // Build flexible region grid from areaMeta
+  function buildRegionCards(){
+    const grid = document.getElementById('regionsGrid');
+    grid.innerHTML = '';
+
+    // We'll iterate areaMeta and find matching forecast for each area by name
+    areaMeta.forEach((area, idx) => {
+      const forecastObj = forecasts.find(f=>f.area===area.name) || {area:area.name, forecast:'—'};
+      const card = document.createElement('button');
+      card.className = 'region-card';
+      card.type = 'button';
+      card.dataset.index = idx;
+      card.innerHTML = `
+        <div class="name">${area.name}</div>
+      `;
+      card.addEventListener('click', ()=> selectRegion(idx));
+      grid.appendChild(card);(card);
+    });
+  }
+
+  function selectRegion(idx){
+    const grid = document.getElementById('regionsGrid');
+    const prev = grid.querySelector('.region-card.selected');
+    if (prev) prev.classList.remove('selected');
+
+    const newCard = grid.querySelector(`.region-card[data-index=\"${idx}\"]`);
+    if (newCard) newCard.classList.add('selected');
+
+    selectedIndex = idx;
+    const area = areaMeta[idx];
+    const forecastObj = forecasts.find(f=>f.area===area.name) || {forecast:'—'};
+
+    document.getElementById('weatherRegion').textContent = area.name;
+    document.getElementById('weatherForecast').textContent = forecastObj.forecast;
+    document.getElementById('weatherEmoji').textContent = mapForecastToEmoji(forecastObj.forecast);
+    // update duration if available
+    // Try to get the valid_period text from the items array (already set during fetch)
+
+    // scroll selected card into view inside the scrollable container (so user sees selection)
+    newCard && newCard.scrollIntoView({behavior:'smooth',block:'nearest',inline:'nearest'});
+  }
+
+</script>
+</body>
+</html>
