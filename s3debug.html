@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>NEA 2-Hour Weather Forecast</title>
+<!--<link rel="stylesheet" href="style.css"> -->
+<style>
+  /* style.css */
+html,body {
+  height:100%;
+  margin:0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+  background:white;
+}
+header.app-title {
+  position:fixed;
+  left:10px;
+  right:10px;
+  top:10px;
+  height:40px;
+  background:deepskyblue;
+  border-radius:8px;
+  display:flex;
+  align-items:center;
+  padding:10px;
+  z-index:40;
+  border:1px solid black;
+}
+header.app-title h1 {
+  font-size:1.2rem;
+  margin:0;
+}
+section.weather-panel {
+  position:fixed;
+  left:10px;
+  right:10px;
+  top:60px;
+  height:120px;
+  background:white;
+  border-radius:8px;
+  padding:10px;
+  display:flex;
+  gap:10px;
+  align-items:center;
+  z-index:35;
+  border:1px solid #eee;
+}
+.weather-left { flex:1; }
+.weather-right { width:140px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.weather-emoji { font-size:44px; }
+.weather-region { font-weight:700; font-size:1.15rem; }
+.weather-forecast { margin-top:4px; font-size:1rem; }
+.forecast-duration { margin-top:6px; color:grey; font-size:0.9rem; }
+.muted { color:#666; font-size:0.85rem; }
+.instruction {
+  position:fixed;
+  left:10px;
+  right:10px;
+  top:210px;
+  height:30px;
+  background:yellow;
+  border-radius:8px;
+  border:1px solid black;
+  display:flex;
+  align-items:center;
+  padding:10px;
+  z-index:30;
+  font-weight:600;
+}
+.regions-wrap {
+  position:fixed;
+  left:10px;
+  right:10px;
+  top:270px;
+  bottom:60px;
+  overflow:auto;
+  padding:10px;
+  border-radius:8px;
+  background:white;
+}
+.regions-grid {
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+}
+.region-card {
+  appearance:none;
+  border:1px solid black;
+  background:aqua;
+  color:#000;
+  padding:12px;
+  border-radius:8px;
+  cursor:pointer;
+  display:flex;
+  gap:10px;
+  min-width:150px;
+  max-width:320px;
+  flex: 1 1 calc(25% - 10px);
+}
+.region-card.selected {
+  background:green;
+  color:white;
+}
+footer {
+  position:fixed;
+  left:10px;
+  right:10px;
+  bottom:10px;
+  height:25px;
+  padding:6px;
+  border-radius:8px;
+  border:1px solid black;
+  background:white;
+  font-size:0.75rem;
+}
+</style>
+</head>
+<body>
+<header class="app-title"><h1>NEA 2-Hour Weather Forecast</h1></header>
+<section class="weather-panel" aria-live="polite">
+  <div class="weather-left">
+    <div class="weather-region" id="weatherRegion">—</div>
+    <div class="weather-forecast" id="weatherForecast">Select a region to view forecast</div>
+    <div class="forecast-duration muted" id="weatherDuration"></div>
+  </div>
+  <div class="weather-right">
+    <div class="weather-emoji" id="weatherEmoji">⛅</div>
+    <div class="muted" id="lastUpdated">Last updated: —</div>
+  </div>
+</section>
+<div class="instruction">Select A Region to View the Weather Forecast</div>
+<div class="regions-wrap">
+  <div id="errorBox" style="display:none;color:#800;margin-bottom:8px"></div>
+  <div id="regionsGrid" class="regions-grid"></div>
+</div>
+<!--<script src="script.js"></script> -->
+<script>
+  // script.js
+  const emojiMap = {
+      'Fair and Warm': '🌤️',
+      'Fair (Day)': '🌤️',
+      'Fair (Night)': '🌙',
+      'Fair': '🌤️',
+      'Partly Cloudy (Day)': '⛅',
+      'Partly Cloudy (Night)': '☁️🌙',
+      'Partly Cloudy': '⛅',
+      'Cloudy': '☁️',
+      'Hazy': '🌫️',
+      'Slightly Hazy': '🌫️',
+      'Windy': '💨',
+      'Mist': '🌫️',
+      'Fog': '🌫️',
+      'Light Rain': '🌦️',
+      'Moderate Rain': '🌧️',
+      'Heavy Rain': '⛈️',
+      'Passing Showers': '🌦️',
+      'Light Showers': '🌦️',
+      'Showers': '🌧️',
+      'Heavy Showers': '⛈️',
+      'Thundery Showers': '⛈️',
+      'Heavy Thundery Showers': '🌩️',
+      'Heavy Thundery Showers with Gusty Winds': '🌩️💨'
+  };
+
+  function mapForecastToEmoji(forecast) {
+    if (!forecast) return '❓';
+    for (const key in emojiMap) {
+      if (forecast.toLowerCase().includes(key.toLowerCase())) return emojiMap[key];
+    }
+    return '❓';
+  }
+
+  let areaMeta = [], forecasts = [];
+  const API_URL = 'https://api-open.data.gov.sg/v2/real-time/api/two-hr-forecast';
+
+  window.addEventListener('load', () => fetchNEA());
+
+  async function fetchNEA() {
+    try {
+      const res = await fetch(API_URL);
+      if (!res.ok) { showError('HTTP ' + res.status); return; }
+      const data = await res.json();
+      if (!data?.data?.area_metadata || !data?.data?.items?.length) { showError('Unexpected structure'); return; }
+
+      areaMeta = data.data.area_metadata;
+      forecasts = data.data.items[0].forecasts;
+      document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date(data.data.items[0].timestamp).toLocaleString();
+      document.getElementById('weatherDuration').textContent = data.data.items[0].valid_period?.text || '—';
+
+      buildRegionCards();
+      if(areaMeta.length) selectRegion(0);
+    } catch (e) {
+      showError('Fetch error');
+    }
+  }
+
+  function showError(msg) {
+    const box = document.getElementById('errorBox');
+    box.style.display = 'block';
+    box.textContent = msg;
+  }
+
+  function buildRegionCards() {
+    const grid = document.getElementById('regionsGrid');
+    grid.innerHTML = '';
+    areaMeta.forEach((area, i) => {
+      const card = document.createElement('button');
+      card.className = 'region-card';
+      card.dataset.index = i;
+      card.textContent = area.name;
+      card.onclick = () => selectRegion(i);
+      grid.appendChild(card);
+    });
+  }
+
+  function selectRegion(i) {
+    document.querySelectorAll('.region-card').forEach(x => x.classList.remove('selected'));
+    const card = document.querySelector(`.region-card[data-index="${i}"]`);
+    if (card) card.classList.add('selected');
+
+    const area = areaMeta[i];
+    const forecastObj = forecasts.find(f => f.area === area.name);
+
+    document.getElementById('weatherRegion').textContent = area.name;
+    document.getElementById('weatherForecast').textContent = forecastObj?.forecast || '—';
+    document.getElementById('weatherEmoji').textContent = mapForecastToEmoji(forecastObj?.forecast);
+  }
+
+</script>
+<footer><small>© PP Choo — Data from api-open.data.gov.sg</small></footer>
+</body>
+</html>

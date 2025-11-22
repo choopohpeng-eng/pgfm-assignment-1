@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>NEA 2-Hour Weather Forecast</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="app-title"><h1>NEA 2-Hour Weather Forecast</h1></header>
+<section class="weather-panel" aria-live="polite">
+  <div class="weather-left">
+    <div class="weather-region" id="weatherRegion">—</div>
+    <div class="weather-forecast" id="weatherForecast">Select a region to view forecast</div>
+    <div class="forecast-duration muted" id="weatherDuration"></div>
+  </div>
+  <div class="weather-right">
+    <div class="weather-emoji" id="weatherEmoji">⛅</div>
+    <div class="muted" id="lastUpdated">Last updated: —</div>
+  </div>
+</section>
+<div class="instruction">Select A Region to View the Weather Forecast</div>
+<div class="regions-wrap">
+  <div id="errorBox" style="display:none;color:#800;margin-bottom:8px"></div>
+  <div id="regionsGrid" class="regions-grid"></div>
+</div>
+<script src="script.js"></script>
+<footer><small>© PP Choo — Data from api-open.data.gov.sg</small></footer>
+</body>
+</html>
