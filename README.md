@@ -17,3 +17,6 @@ The app retrieves live weather information from the NEA weather API and updates 
 
 Future upgrades could include a detailed Singapore map with street names, allowing users to locate places outside the 47 predefined regions. 
 They could then check the weather for the closest region, ensuring more accurate and practical information.
+
+Visit my website to test the app 
+https://github.com/choopohpeng-eng/pgfm-assignment-1.git
